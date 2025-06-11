@@ -15,20 +15,26 @@ A multi-architecture assembler that supports Intel syntax for both x86 and ARM a
 
 ### Implemented Features
 - ✅ Complete lexical analysis (tokenizer)
-- ✅ Intel syntax parser for basic instructions
+- ✅ Intel syntax parser for instructions and basic directives
 - ✅ Symbol table with label support
-- ✅ Basic x86-64 instruction encoding (MOV, NOP, RET)
+- ✅ Extended x86-64 instruction encoding (MOV, ADD, SUB, CMP, JMP, conditional jumps)
+- ✅ Jump and conditional branch instructions (JE, JNE, JL, JG, etc.)
+- ✅ Section directive recognition (.text, .data, .bss)
+- ✅ Basic data definition directives (db, dw, dd, dq, resb, etc.)
+- ✅ Label definitions and references
 - ✅ Command-line interface with multiple options
 - ✅ Binary output format
-- ✅ Register recognition for x86/x64
+- ✅ Register recognition for x86/x64 (8, 16, 32, 64-bit)
 
 ### In Progress / TODO
-- 🔄 Extended x86 instruction set (ADD, SUB, JMP, etc.)
-- 🔄 Memory operand parsing and encoding
+- 🔄 Memory operand encoding (basic framework ready)
+- 🔄 Data section generation and linking
+- 🔄 String literal support in data definitions
+- 🔄 Complex addressing modes ([base + index*scale + displacement])
+- 🔄 More x86 instructions (PUSH, POP, CALL, etc.)
 - 🔄 ARM instruction support
 - 🔄 ELF and PE output format support
-- 🔄 Directive support (.data, .text, .section)
-- 🔄 More complex addressing modes
+- 🔄 Proper label offset calculation for jumps
 
 ## Architecture Support
 
@@ -101,13 +107,32 @@ The assembler supports Intel syntax assembly language.
 ### Example Assembly Code
 
 ```assembly
-; Simple x86-64 program
+; Simple x86-64 program with control flow
+.text
 main:
-    mov rax, 0x1234567890ABCDEF  ; 64-bit immediate to register
-    mov rbx, rax                 ; register to register transfer
-    mov ecx, 42                  ; 32-bit immediate to register
-    nop                          ; no operation
-    ret                          ; return
+    mov rax, 100                 ; Load immediate value
+    mov rbx, rax                 ; Copy to another register
+    add rax, 10                  ; Add immediate
+    sub rbx, 5                   ; Subtract immediate
+    cmp rax, rbx                 ; Compare values
+    
+    je equal                     ; Jump if equal
+    jg greater                   ; Jump if greater
+    
+equal:
+    mov rcx, 1                   ; Set result
+    jmp end                      ; Unconditional jump
+    
+greater:
+    mov rcx, 2                   ; Set different result
+    
+end:
+    nop                          ; No operation
+    ret                          ; Return
+
+.data
+    counter dq 42                ; 64-bit data
+    buffer  resb 64              ; Reserve 64 bytes
 ```
 
 ### Supported Instructions (x86-64)
@@ -115,10 +140,34 @@ main:
 | Instruction | Description | Example |
 |-------------|-------------|---------|
 | `mov` | Move data | `mov rax, 42`, `mov rbx, rax` |
+| `add` | Add values | `add rax, 10` |
+| `sub` | Subtract values | `sub rbx, 5` |
+| `cmp` | Compare values | `cmp rax, rbx` |
+| `jmp` | Unconditional jump | `jmp label` |
+| `je`/`jz` | Jump if equal/zero | `je equal_label` |
+| `jne`/`jnz` | Jump if not equal/zero | `jne not_equal_label` |
+| `jl` | Jump if less than | `jl less_label` |
+| `jle` | Jump if less or equal | `jle less_equal_label` |
+| `jg` | Jump if greater than | `jg greater_label` |
+| `jge` | Jump if greater or equal | `jge greater_equal_label` |
 | `nop` | No operation | `nop` |
 | `ret` | Return | `ret` |
 
-*More instructions coming soon...*
+### Supported Directives
+
+| Directive | Description | Example |
+|-----------|-------------|---------|
+| `.text` | Code section | `.text` |
+| `.data` | Data section | `.data` |
+| `.bss` | Uninitialized data section | `.bss` |
+| `db` | Define byte(s) | `db 42`, `db 'H'` |
+| `dw` | Define word(s) | `dw 1234` |
+| `dd` | Define dword(s) | `dd 0x12345678` |
+| `dq` | Define qword(s) | `dq 0x123456789ABCDEF0` |
+| `resb` | Reserve bytes | `resb 64` |
+| `resw` | Reserve words | `resw 32` |
+| `resd` | Reserve dwords | `resd 16` |
+| `resq` | Reserve qwords | `resq 8` |
 
 ### Supported Registers (x86-64)
 

@@ -229,6 +229,46 @@ static int encode_x86_mov(instruction_t* instr, uint8_t* output, int max_size) {
         }
     }
     
+    // MOV reg, [reg] - load from memory
+    if (dst->type == OPERAND_REGISTER && src->type == OPERAND_MEMORY) {
+        if (dst->data.reg.reg_info && dst->data.reg.reg_info->size_bits == 64 &&
+            src->data.mem.base && !src->data.mem.index && src->data.mem.displacement == 0) {
+            if (max_size < 3) return -1;
+            
+            // REX.W prefix
+            output[0] = 0x48;
+            
+            // MOV r64, r/m64 opcode
+            output[1] = 0x8B;
+            
+            // ModR/M byte: 00 (memory mode) + dst_reg * 8 + base_reg
+            output[2] = 0x00 + (dst->data.reg.reg_info->encoding << 3) + 
+                       src->data.mem.base->encoding;
+            
+            return 3;
+        }
+    }
+    
+    // MOV [reg], reg - store to memory
+    if (dst->type == OPERAND_MEMORY && src->type == OPERAND_REGISTER) {
+        if (src->data.reg.reg_info && src->data.reg.reg_info->size_bits == 64 &&
+            dst->data.mem.base && !dst->data.mem.index && dst->data.mem.displacement == 0) {
+            if (max_size < 3) return -1;
+            
+            // REX.W prefix
+            output[0] = 0x48;
+            
+            // MOV r/m64, r64 opcode
+            output[1] = 0x89;
+            
+            // ModR/M byte: 00 (memory mode) + src_reg * 8 + base_reg
+            output[2] = 0x00 + (src->data.reg.reg_info->encoding << 3) + 
+                       dst->data.mem.base->encoding;
+            
+            return 3;
+        }
+    }
+    
     return -1; // Unsupported operand combination
 }
 
@@ -248,6 +288,152 @@ static int encode_x86_ret(instruction_t* instr, uint8_t* output, int max_size) {
     return 1;
 }
 
+static int encode_x86_add(instruction_t* instr, uint8_t* output, int max_size) {
+    if (instr->operand_count != 2) return -1;
+    
+    operand_t* dst = &instr->operands[0];
+    operand_t* src = &instr->operands[1];
+    
+    // ADD reg, imm
+    if (dst->type == OPERAND_REGISTER && src->type == OPERAND_IMMEDIATE) {
+        if (dst->data.reg.reg_info && dst->data.reg.reg_info->size_bits == 64) {
+            if (max_size < 7) return -1;
+            
+            // REX.W prefix for 64-bit
+            output[0] = 0x48;
+            
+            // ADD r/m64, imm32 opcode
+            output[1] = 0x81;
+            
+            // ModR/M byte: 11 (register mode) + 000 (ADD) + dst_reg
+            output[2] = 0xC0 + dst->data.reg.reg_info->encoding;
+            
+            // Immediate value (little-endian, 32-bit)
+            uint32_t imm = (uint32_t)src->data.imm.value;
+            for (int i = 0; i < 4; i++) {
+                output[3 + i] = (imm >> (i * 8)) & 0xFF;
+            }
+            
+            return 7;
+        }
+    }
+    
+    return -1; // Unsupported operand combination
+}
+
+static int encode_x86_sub(instruction_t* instr, uint8_t* output, int max_size) {
+    if (instr->operand_count != 2) return -1;
+    
+    operand_t* dst = &instr->operands[0];
+    operand_t* src = &instr->operands[1];
+    
+    // SUB reg, imm
+    if (dst->type == OPERAND_REGISTER && src->type == OPERAND_IMMEDIATE) {
+        if (dst->data.reg.reg_info && dst->data.reg.reg_info->size_bits == 64) {
+            if (max_size < 7) return -1;
+            
+            // REX.W prefix for 64-bit
+            output[0] = 0x48;
+            
+            // SUB r/m64, imm32 opcode
+            output[1] = 0x81;
+            
+            // ModR/M byte: 11 (register mode) + 101 (SUB) + dst_reg
+            output[2] = 0xE8 + dst->data.reg.reg_info->encoding;
+            
+            // Immediate value (little-endian, 32-bit)
+            uint32_t imm = (uint32_t)src->data.imm.value;
+            for (int i = 0; i < 4; i++) {
+                output[3 + i] = (imm >> (i * 8)) & 0xFF;
+            }
+            
+            return 7;
+        }
+    }
+    
+    return -1; // Unsupported operand combination
+}
+
+static int encode_x86_cmp(instruction_t* instr, uint8_t* output, int max_size) {
+    if (instr->operand_count != 2) return -1;
+    
+    operand_t* dst = &instr->operands[0];
+    operand_t* src = &instr->operands[1];
+    
+    // CMP reg, imm
+    if (dst->type == OPERAND_REGISTER && src->type == OPERAND_IMMEDIATE) {
+        if (dst->data.reg.reg_info && dst->data.reg.reg_info->size_bits == 64) {
+            if (max_size < 7) return -1;
+            
+            // REX.W prefix for 64-bit
+            output[0] = 0x48;
+            
+            // CMP r/m64, imm32 opcode
+            output[1] = 0x81;
+            
+            // ModR/M byte: 11 (register mode) + 111 (CMP) + dst_reg
+            output[2] = 0xF8 + dst->data.reg.reg_info->encoding;
+            
+            // Immediate value (little-endian, 32-bit)
+            uint32_t imm = (uint32_t)src->data.imm.value;
+            for (int i = 0; i < 4; i++) {
+                output[3 + i] = (imm >> (i * 8)) & 0xFF;
+            }
+            
+            return 7;
+        }
+    }
+    
+    return -1; // Unsupported operand combination
+}
+
+static int encode_x86_jmp(instruction_t* instr, uint8_t* output, int max_size) {
+    if (instr->operand_count != 1) return -1;
+    
+    operand_t* target = &instr->operands[0];
+    
+    // JMP rel32 (placeholder - actual offset calculation needed)
+    if (target->type == OPERAND_LABEL) {
+        if (max_size < 5) return -1;
+        
+        output[0] = 0xE9;  // JMP rel32 opcode
+        
+        // Placeholder offset - this should be filled in during linking
+        output[1] = 0x00;
+        output[2] = 0x00;
+        output[3] = 0x00;
+        output[4] = 0x00;
+        
+        return 5;
+    }
+    
+    return -1;
+}
+
+static int encode_x86_conditional_jump(instruction_t* instr, uint8_t* output, int max_size, uint8_t opcode) {
+    if (instr->operand_count != 1) return -1;
+    
+    operand_t* target = &instr->operands[0];
+    
+    // Conditional jump rel32 (placeholder)
+    if (target->type == OPERAND_LABEL) {
+        if (max_size < 6) return -1;
+        
+        output[0] = 0x0F;    // Two-byte opcode prefix
+        output[1] = opcode;  // Conditional jump opcode
+        
+        // Placeholder offset
+        output[2] = 0x00;
+        output[3] = 0x00;
+        output[4] = 0x00;
+        output[5] = 0x00;
+        
+        return 6;
+    }
+    
+    return -1;
+}
+
 int encode_instruction(instruction_t* instr, arch_type_t arch, uint8_t* output, int max_size) {
     if (!instr || !output || max_size <= 0) return -1;
     
@@ -258,6 +444,26 @@ int encode_instruction(instruction_t* instr, arch_type_t arch, uint8_t* output, 
             // Basic x86 instruction encoding
             if (strcasecmp(instr->mnemonic, "mov") == 0) {
                 return encode_x86_mov(instr, output, max_size);
+            } else if (strcasecmp(instr->mnemonic, "add") == 0) {
+                return encode_x86_add(instr, output, max_size);
+            } else if (strcasecmp(instr->mnemonic, "sub") == 0) {
+                return encode_x86_sub(instr, output, max_size);
+            } else if (strcasecmp(instr->mnemonic, "cmp") == 0) {
+                return encode_x86_cmp(instr, output, max_size);
+            } else if (strcasecmp(instr->mnemonic, "jmp") == 0) {
+                return encode_x86_jmp(instr, output, max_size);
+            } else if (strcasecmp(instr->mnemonic, "je") == 0 || strcasecmp(instr->mnemonic, "jz") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x84);
+            } else if (strcasecmp(instr->mnemonic, "jne") == 0 || strcasecmp(instr->mnemonic, "jnz") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x85);
+            } else if (strcasecmp(instr->mnemonic, "jl") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x8C);
+            } else if (strcasecmp(instr->mnemonic, "jle") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x8E);
+            } else if (strcasecmp(instr->mnemonic, "jg") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x8F);
+            } else if (strcasecmp(instr->mnemonic, "jge") == 0) {
+                return encode_x86_conditional_jump(instr, output, max_size, 0x8D);
             } else if (strcasecmp(instr->mnemonic, "nop") == 0) {
                 return encode_x86_nop(instr, output, max_size);
             } else if (strcasecmp(instr->mnemonic, "ret") == 0) {

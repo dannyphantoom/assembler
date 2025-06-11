@@ -49,6 +49,16 @@ static const char* x86_instructions[] = {
     "cmp", "test", "and", "or", "xor", "not", "shl",
     "shr", "sal", "sar", "rol", "ror", "rcl", "rcr",
     "lea", "nop", "int", "iret", "hlt", "cli", "sti",
+    "loop", "loope", "loopz", "loopne", "loopnz",
+    NULL
+};
+
+// Data definition directives
+static const char* x86_directives[] = {
+    "db", "dw", "dd", "dq",           // data definitions
+    "resb", "resw", "resd", "resq",   // reserve bytes
+    "section", "segment",             // section directives
+    "global", "extern",               // symbol visibility
     NULL
 };
 
@@ -63,7 +73,6 @@ lexer_t* lexer_create(FILE* file) {
         return NULL;
     }
     
-    lexer->buffer_size = BUFFER_SIZE;
     lexer->position = 0;
     lexer->line = 1;
     lexer->column = 1;
@@ -71,6 +80,7 @@ lexer_t* lexer_create(FILE* file) {
     
     // Read initial buffer
     size_t bytes_read = fread(lexer->buffer, 1, BUFFER_SIZE, file);
+    lexer->buffer_size = bytes_read;  // Set actual size of data read
     if (bytes_read < BUFFER_SIZE) {
         lexer->buffer[bytes_read] = '\0';
         lexer->eof_reached = true;
@@ -104,15 +114,24 @@ bool is_instruction(const char* str) {
     return false;
 }
 
+bool is_directive(const char* str) {
+    for (int i = 0; x86_directives[i]; i++) {
+        if (strcasecmp(str, x86_directives[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static char lexer_peek(lexer_t* lexer) {
-    if (lexer->position >= lexer->buffer_size || lexer->eof_reached) {
+    if (lexer->position >= lexer->buffer_size) {
         return '\0';
     }
     return lexer->buffer[lexer->position];
 }
 
 static char lexer_advance_char(lexer_t* lexer) {
-    if (lexer->position >= lexer->buffer_size || lexer->eof_reached) {
+    if (lexer->position >= lexer->buffer_size) {
         return '\0';
     }
     
@@ -183,6 +202,8 @@ static token_t* lexer_read_string(lexer_t* lexer) {
         type = TOKEN_REGISTER;
     } else if (is_instruction(buffer)) {
         type = TOKEN_INSTRUCTION;
+    } else if (is_directive(buffer)) {
+        type = TOKEN_DIRECTIVE;
     }
     
     return token_create(type, buffer, start_line, start_column);
@@ -286,6 +307,34 @@ token_t* lexer_next_token(lexer_t* lexer) {
     // Identifiers, registers, instructions
     if (isalpha(c) || c == '_') {
         return lexer_read_string(lexer);
+    }
+    
+    // Handle directives starting with dot
+    if (c == '.') {
+        int dot_line = line;
+        int dot_column = column;
+        lexer_advance_char(lexer); // consume '.'
+        
+        if (isalpha(lexer_peek(lexer))) {
+            // Read the directive name after the dot
+            char buffer[256];
+            int pos = 0;
+            
+            while (isalnum(lexer_peek(lexer)) || lexer_peek(lexer) == '_') {
+                if (pos < 255) {
+                    buffer[pos++] = lexer_advance_char(lexer);
+                } else {
+                    lexer_advance_char(lexer);
+                }
+            }
+            buffer[pos] = '\0';
+            
+            // Create directive token
+            return token_create(TOKEN_DIRECTIVE, buffer, dot_line, dot_column);
+        } else {
+            // Just a standalone dot
+            return token_create(TOKEN_DOT, ".", dot_line, dot_column);
+        }
     }
     
     // Unknown character

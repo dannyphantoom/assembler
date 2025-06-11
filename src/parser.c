@@ -256,8 +256,126 @@ bool parse_label(parser_t* parser) {
     return is_label;
 }
 
+bool parse_section_directive(parser_t* parser) {
+    if (!parser->current_token || parser->current_token->type != TOKEN_DIRECTIVE) {
+        return false;
+    }
+    
+    if (strcasecmp(parser->current_token->value, "text") == 0) {
+        parser->current_section = SECTION_TEXT;
+        parser_advance(parser);
+        return true;
+    } else if (strcasecmp(parser->current_token->value, "data") == 0) {
+        parser->current_section = SECTION_DATA;
+        parser_advance(parser);
+        return true;
+    } else if (strcasecmp(parser->current_token->value, "bss") == 0) {
+        parser->current_section = SECTION_BSS;
+        parser_advance(parser);
+        return true;
+    }
+    
+    return false;
+}
+
+data_definition_t* parse_data_definition(parser_t* parser) {
+    if (!parser->current_token || parser->current_token->type != TOKEN_DIRECTIVE) {
+        return NULL;
+    }
+    
+    data_definition_t* data_def = malloc(sizeof(data_definition_t));
+    if (!data_def) return NULL;
+    
+    data_def->repeat_count = 1;
+    
+    // Determine data type from directive
+    if (strcasecmp(parser->current_token->value, "db") == 0) {
+        data_def->type = DATA_BYTE;
+    } else if (strcasecmp(parser->current_token->value, "dw") == 0) {
+        data_def->type = DATA_WORD;
+    } else if (strcasecmp(parser->current_token->value, "dd") == 0) {
+        data_def->type = DATA_DWORD;
+    } else if (strcasecmp(parser->current_token->value, "dq") == 0) {
+        data_def->type = DATA_QWORD;
+    } else if (strcasecmp(parser->current_token->value, "resb") == 0) {
+        data_def->type = DATA_BYTE;
+        data_def->data.byte_value = 0;
+    } else if (strcasecmp(parser->current_token->value, "resw") == 0) {
+        data_def->type = DATA_WORD;
+        data_def->data.word_value = 0;
+    } else if (strcasecmp(parser->current_token->value, "resd") == 0) {
+        data_def->type = DATA_DWORD;
+        data_def->data.dword_value = 0;
+    } else if (strcasecmp(parser->current_token->value, "resq") == 0) {
+        data_def->type = DATA_QWORD;
+        data_def->data.qword_value = 0;
+    } else {
+        free(data_def);
+        return NULL;
+    }
+    
+    bool is_reserve = (strncasecmp(parser->current_token->value, "res", 3) == 0);
+    parser_advance(parser); // consume directive
+    
+    // Parse the data value or count
+    if (parser->current_token && parser->current_token->type == TOKEN_NUMBER) {
+        uint64_t value = parser->current_token->numeric_value;
+        
+        if (is_reserve) {
+            data_def->repeat_count = value;
+        } else {
+            switch (data_def->type) {
+                case DATA_BYTE:
+                    data_def->data.byte_value = (uint8_t)value;
+                    break;
+                case DATA_WORD:
+                    data_def->data.word_value = (uint16_t)value;
+                    break;
+                case DATA_DWORD:
+                    data_def->data.dword_value = (uint32_t)value;
+                    break;
+                case DATA_QWORD:
+                    data_def->data.qword_value = value;
+                    break;
+            }
+        }
+        parser_advance(parser);
+    } else {
+        free(data_def);
+        return NULL;
+    }
+    
+    return data_def;
+}
+
+void data_definition_destroy(data_definition_t* data_def) {
+    if (data_def) {
+        if (data_def->type == DATA_BYTE && data_def->data.string_value) {
+            // Handle string data later
+            free(data_def->data.string_value);
+        }
+        free(data_def);
+    }
+}
+
 bool parse_directive(parser_t* parser) {
-    // TODO: Implement directive parsing (.data, .text, .section, etc.)
+    if (!parser->current_token || parser->current_token->type != TOKEN_DIRECTIVE) {
+        return false;
+    }
+    
+    // Try to parse section directive
+    if (parse_section_directive(parser)) {
+        return true;
+    }
+    
+    // Try to parse data definition
+    data_definition_t* data_def = parse_data_definition(parser);
+    if (data_def) {
+        // TODO: Add data definition to program
+        data_definition_destroy(data_def);
+        return true;
+    }
+    
     return false;
 }
 
@@ -273,12 +391,21 @@ program_t* parser_parse(parser_t* parser) {
     
     program->instruction_count = 0;
     program->instruction_capacity = INITIAL_CAPACITY;
+    program->data_definitions = malloc(INITIAL_CAPACITY * sizeof(data_definition_t*));
+    program->data_count = 0;
+    program->data_capacity = INITIAL_CAPACITY;
     program->symbols = parser->symbol_table;
     program->code = malloc(MAX_CODE_SIZE);
     program->code_size = 0;
+    program->data_section = malloc(MAX_CODE_SIZE);
+    program->data_size = 0;
+    program->current_section = SECTION_TEXT;
     
-    if (!program->code) {
+    if (!program->code || !program->data_section || !program->data_definitions) {
         free(program->instructions);
+        free(program->data_definitions);
+        free(program->code);
+        free(program->data_section);
         free(program);
         return NULL;
     }
@@ -357,7 +484,15 @@ void program_destroy(program_t* program) {
         free(program->instructions);
     }
     
+    if (program->data_definitions) {
+        for (int i = 0; i < program->data_count; i++) {
+            data_definition_destroy(program->data_definitions[i]);
+        }
+        free(program->data_definitions);
+    }
+    
     free(program->code);
+    free(program->data_section);
     // Note: Don't destroy symbol_table here as it's owned by parser
     free(program);
 } 

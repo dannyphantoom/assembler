@@ -26,6 +26,11 @@ typedef enum {
     TOKEN_STRING,
     TOKEN_DIRECTIVE,
     TOKEN_COMMENT,
+    TOKEN_DOT,
+    TOKEN_DWORD_PTR,
+    TOKEN_QWORD_PTR,
+    TOKEN_BYTE_PTR,
+    TOKEN_WORD_PTR,
     TOKEN_UNKNOWN
 } token_type_t;
 
@@ -56,5 +61,6 @@ token_t* lexer_next_token(lexer_t* lexer);
 void token_destroy(token_t* token);
 bool is_register(const char* str);
 bool is_instruction(const char* str);
+bool is_directive(const char* str);
 
 #endif // LEXER_H 
